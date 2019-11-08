@@ -5,9 +5,241 @@
 #   Sorin Ionescu <sorin.ionescu@gmail.com>
 #
 
-# Source Prezto.
-if [[ -s "${ZDOTDIR:-$HOME}/.zprezto/init.zsh" ]]; then
-  source "${ZDOTDIR:-$HOME}/.zprezto/init.zsh"
+if [ -z "$PS1" ] ; then
+  # If not running interactively, don't do anything
+  return
 fi
 
 # Customize to your needs...
+
+# If I could disable Ctrl-s completely I would!
+setopt NO_FLOW_CONTROL
+stty ixany
+stty ixoff -ixon
+
+# beeps are annoying
+setopt NO_BEEP
+
+# Ignore lines prefixed with '#'
+setopt INTERACTIVECOMMENTS
+
+# Ignore duplicate in history
+setopt HIST_IGNORE_DUPS
+
+# Prevent record in history entry if preceding them with at least one space
+setopt HIST_IGNORE_SPACE
+
+# Killer: share history between multiple shells
+setopt SHARE_HISTORY
+
+# Pretty Obvious. Right?
+setopt HIST_REDUCE_BLANKS
+
+# If a line starts with a space, don't save it
+setopt HIST_IGNORE_SPACE
+setopt HIST_NO_STORE
+
+# When using a hist thing, make a newline show the change before executing it
+setopt HIST_VERIFY
+
+# Save the time and how long a command ran
+setopt EXTENDED_HISTORY
+
+# Avoid problem with HEAD^
+setopt NO_NOMATCH
+
+# Now we can pipe to multiple outputs!
+setopt MULTIOS
+
+# Make Vi mode transitions faster (KEYTIMEOUT is in hundredths of a second)
+export KEYTIMEOUT=1
+
+#
+# Key bindings
+#
+# History features
+bindkey "^R" history-incremental-search-backward
+
+# Ctrl+right => forward word
+bindkey "^[[1;5C" forward-word
+
+# Ctrl+left => backward word
+bindkey "^[[1;5D" backward-word
+
+# Bind Ctrl+Backspace to delete a previous word
+bindkey '^H' backward-kill-word
+
+# Use Ctrl-Z to switch back to Vim
+fancy-ctrl-z () {
+  if [[ $#BUFFER -eq 0 ]]; then
+    BUFFER="fg"
+    zle accept-line
+  else
+    zle push-input
+    zle clear-screen
+  fi
+}
+
+zle -N fancy-ctrl-z
+bindkey '^Z' fancy-ctrl-z
+
+# View manpage while editing a command
+bindkey -M vicmd 'K' run-help
+
+# copy current line to clipboard in Vi Insert mode with Ctrl-ay
+function _copy-to-clipboard {
+    print -rn -- $BUFFER | xclip
+    [ -n "$TMUX" ] && tmux display-message 'Line copied to clipboard!'
+}
+zle -N _copy-to-clipboard
+bindkey -M viins "^ay" _copy-to-clipboard
+
+# same behavior from bash for vi-mode
+autoload edit-command-line
+zle -N edit-command-line
+bindkey -M vicmd v edit-command-line
+
+#
+# Colors
+#
+# Terminals with any of the following set, support 256 colors (and are local)
+local256="$COLORTERM$XTERM_VERSION$ROXTERM_ID$KONSOLE_DBUS_SESSION"
+
+if [ -n "$local256" ] || [ -n "$SEND_256_COLORS_TO_REMOTE" ]; then
+
+  case "$TERM" in
+    'xterm') TERM=xterm-256color;;
+    'screen') TERM=screen-256color;;
+    'Eterm') TERM=Eterm-256color;;
+  esac
+  export TERM
+
+  if [ -n "$TERMCAP" ] && [ "$TERM" = "screen-256color" ]; then
+    TERMCAP=$(echo "$TERMCAP" | sed -e 's/Co#8/Co#256/g')
+    export TERMCAP
+  fi
+fi
+
+unset local256
+
+#
+# Paths
+#
+
+# Ensure path arrays do not contain duplicates
+# typeset -gU cdpath fpath mailpath path
+
+# set PATH so it includes user's private bin if it exists
+if [ -d ~/.local/bin ] ; then
+  PATH=~/.local/bin:"${PATH}"
+fi
+
+# set PATH so it includes user's private bin if it exists
+if [ -d ~/bin ] ; then
+  PATH=~/bin:"${PATH}"
+fi
+
+NODE_GLOBAL_PATH=$HOME/.npm-global/bin
+if [ -d "${NODE_GLOBAL_PATH}" ]; then
+  PATH="${NODE_GLOBAL_PATH}:${PATH}"
+fi
+
+RUST_GLOBAL_PATH=$HOME/.cargo/bin
+if [ -d "${RUST_GLOBAL_PATH}" ]; then
+  PATH="${RUST_GLOBAL_PATH}:${PATH}"
+fi
+
+LOCAL_PATH=$HOME/.local/bin
+if [ -d "${LOCAL_PATH}" ]; then
+  PATH="${LOCAL_PATH}:${PATH}"
+fi
+
+CABAL_PATH=$HOME/.cabal/bin
+if [ -d "${CABAL_PATH}" ]; then
+  PATH="${CABAL_PATH}:${PATH}"
+fi
+
+
+if [ -d "$HOME"/local/share/man ] ; then
+  if test -n "$MANPATH" ; then
+    MANPATH=~/local/share/man:"${MANPATH}"
+  else
+    MANPATH=~/local/share/man
+  fi
+fi
+
+# debug bash script
+debug() {
+  local script="$1"; shift
+  bash -x "$(which "$script")" "$@"
+}
+
+# --clear option make sure an intruder cannot use your existing SSH-Agents keys
+[ -x /usr/bin/ruby ] && /usr/bin/keychain --clear $HOME/.ssh/id_rsa
+[ -f $HOME/.keychain/$HOSTNAME-sh ] && source $HOME/.keychain/$HOSTNAME-sh
+
+#
+# History Stuff
+#
+
+# Must before hstr to replace ctrl-r keybinding
+# Command-line fuzzy finder
+
+export HISTTIMEFORMAT="%H:%M > "
+HISTIGNORE='&:[bf]g:ll:h:ls:clear:exit:\&:pwd:up:cd ..:'
+HISTIGNORE=${HISTIGNORE}':cd ~-:cd -:cd:jobs:set -x:ls -l:top'
+HISTIGNORE=${HISTIGNORE}':%1:%2:popd:top:halt:shutdown:reboot*'
+export HISTIGNORE
+shopt -s histreedit         # reedit a history substitution line if it failed
+shopt -s histverify         # edit a recalled history line before executing
+
+# HSTR configuration - add this to ~/.bashrc
+alias hh=hstr                    # hh to be alias for hstr
+export HSTR_CONFIG=hicolor       # get more colors
+shopt -s histappend              # append new history items to .bash_history
+export HISTCONTROL=ignoreboth:erasedups:ignorespace
+export HISTFILESIZE=10000        # increase history file size (default is 500)
+export HISTSIZE=${HISTFILESIZE}  # increase history size (default is 500)
+export HISTFILE=~/.zsh_history
+# ensure synchronization between Bash memory and history file
+export PROMPT_COMMAND="history -a; history -n; ${PROMPT_COMMAND}"
+
+# if this is interactive shell, then bind hstr to Ctrl-r (for Vi mode check doc)
+# if [[ $- =~ .*i.* ]]; then bind '"\C-r": "\C-a hstr -- \C-j"'; fi
+
+# if this is interactive shell, then bind 'kill last command' to Ctrl-x k
+# if [[ $- =~ .*i.* ]]; then bind '"\C-xk": "\C-a hstr -k \C-j"'; fi
+#
+
+#
+# VM settings
+#
+
+export http_proxy=http://web-proxy.rose.hpecorp.net:8088
+export no_proxy='localhost,127.0.0.1,localhost6,::1,.localdomain,.hpecorp.net'
+
+__EDITOR='vim -u ~/.minimal-vimrc'
+alias em="${__EDITOR}"
+export EDITOR="${__EDITOR}"
+
+alias gerrit-code-nos="ssh -p 29418 javier.tia@code-nos.rose.rdlabs.hpecorp.net"
+
+# COV_PATH=/aruba/halon/infra/coverity/cov-analysis-linux64-8.0.0/bin
+# if [ -d ${COV_PATH} ]; then
+  # PATH=${COV_PATH}:"${PATH}"
+# fi
+
+# add user base to python path
+# __PYTHON_PATH=$(python -c "import site, os; print(os.path.join(site.USER_BASE, 'lib', 'python3.4', 'site-packages'))"):$PYTHONPATH
+# export PYTHONPATH="${__PYTHON_PATH}"
+
+if [[ $(lsb_release -i) = *Ubuntu* ]]; then
+   source /aruba/halon/infra/halon.profile
+fi
+
+remove_PATH_duplicates
+
+# Abbreviation
+abbrev-alias --global g="git"
+
+# vim:set ts=2 sw=2 et:
